@@ -40,3 +40,13 @@ pip install -e '.[dev]'
 ```
 
 The repository is intentionally minimal at initialization. Implementation should proceed in small, testable increments, with destructive filesystem behavior disabled by default.
+
+## Read-only index and duplicate report
+
+The first vertical slice scans regular files without following symlinks, streams
+their contents through SHA-256, stores metadata in SQLite, and reports paths that
+have identical content. It never writes to, moves, links, or deletes source files.
+
+```bash
+asset-vfs /path/to/assets --database /path/to/index.sqlite
+```
