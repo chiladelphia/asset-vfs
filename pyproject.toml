@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+asset-vfs = "asset_vfs.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
