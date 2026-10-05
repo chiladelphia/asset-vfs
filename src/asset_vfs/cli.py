@@ -10,10 +10,15 @@ from .reporting import format_duplicate_report
 from .scanner import scan_files
 
 
-def database_files(database: Path) -> tuple[Path, Path, Path]:
-    """Return the SQLite database path and its possible WAL sidecars."""
+def database_files(database: Path) -> tuple[Path, ...]:
+    """Return the SQLite database path and its possible runtime sidecars."""
     database = database.expanduser().resolve()
-    return database, Path(f"{database}-wal"), Path(f"{database}-shm")
+    return (
+        database,
+        Path(f"{database}-journal"),
+        Path(f"{database}-wal"),
+        Path(f"{database}-shm"),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,7 +29,9 @@ def main(argv: list[str] | None = None) -> int:
 
     excluded = database_files(args.database)
     with AssetIndex(excluded[0]) as index:
-        count = index.index(scan_files(args.root, exclude=excluded))
+        count = index.index(
+            scan_files(args.root, exclude=excluded), scan_root=args.root
+        )
         print(f"Indexed {count} files.")
         print(format_duplicate_report(index.duplicate_groups()))
     return 0
