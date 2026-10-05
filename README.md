@@ -66,6 +66,12 @@ cache hit requires an exact match on size, nanosecond modification time,
 nanosecond change time, device, and inode. A mismatch in any field streams the
 file through SHA-256 again and refreshes its indexed metadata.
 
+## Deduplication design
+
+Hard-linking is not implemented or enabled. The proposed safety, confirmation,
+rollback, recovery, and testing contract is documented in
+[`docs/reversible-deduplication.md`](docs/reversible-deduplication.md).
+
 ```bash
 asset-vfs /path/to/assets --database /path/to/index.sqlite
 ```
