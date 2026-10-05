@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS files (
     path TEXT PRIMARY KEY,
     size INTEGER NOT NULL CHECK (size >= 0),
     modified_ns INTEGER NOT NULL,
+    changed_ns INTEGER NOT NULL,
+    device INTEGER NOT NULL,
+    inode INTEGER NOT NULL,
     sha256 TEXT NOT NULL CHECK (length(sha256) = 64)
 );
 CREATE INDEX IF NOT EXISTS files_sha256_idx ON files (sha256);
@@ -45,6 +48,7 @@ class AssetIndex:
         self.connection = sqlite3.connect(database)
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.executescript(SCHEMA)
+        self._migrate_file_metadata()
 
     def __enter__(self) -> AssetIndex:
         return self
@@ -82,15 +86,35 @@ class AssetIndex:
                 if not path.is_relative_to(scan_root):
                     raise ValueError(f"indexed path is outside scan root: {path}")
                 path_text = str(path)
-                digest = sha256_file(path)
+                metadata = (
+                    file.size,
+                    file.modified_ns,
+                    file.changed_ns,
+                    file.device,
+                    file.inode,
+                )
+                existing = self.connection.execute(
+                    """SELECT size, modified_ns, changed_ns, device, inode, sha256
+                       FROM files WHERE path = ?""",
+                    (path_text,),
+                ).fetchone()
+                digest = (
+                    existing[5]
+                    if existing is not None and existing[:5] == metadata
+                    else sha256_file(path)
+                )
                 self.connection.execute(
-                    """INSERT INTO files (path, size, modified_ns, sha256)
-                       VALUES (?, ?, ?, ?)
+                    """INSERT INTO files
+                         (path, size, modified_ns, changed_ns, device, inode, sha256)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(path) DO UPDATE SET
                          size = excluded.size,
                          modified_ns = excluded.modified_ns,
+                         changed_ns = excluded.changed_ns,
+                         device = excluded.device,
+                         inode = excluded.inode,
                          sha256 = excluded.sha256""",
-                    (path_text, file.size, file.modified_ns, digest),
+                    (path_text, *metadata, digest),
                 )
                 self.connection.execute(
                     """INSERT INTO scan_memberships (scan_root, file_path)
@@ -111,6 +135,18 @@ class AssetIndex:
                     (stale_path,),
                 )
         return count
+
+    def _migrate_file_metadata(self) -> None:
+        """Add cache-validation metadata to indexes created by older versions."""
+        columns = {
+            name
+            for _, name, *_ in self.connection.execute("PRAGMA table_info(files)")
+        }
+        for name in ("changed_ns", "device", "inode"):
+            if name not in columns:
+                self.connection.execute(
+                    f"ALTER TABLE files ADD COLUMN {name} INTEGER NOT NULL DEFAULT -1"
+                )
 
     def _seed_legacy_memberships(self, scan_root: Path) -> None:
         """Associate pre-scope index rows without discarding unrelated history."""
