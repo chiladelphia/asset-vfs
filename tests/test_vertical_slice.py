@@ -60,7 +60,7 @@ def test_index_and_duplicate_report_are_read_only(tmp_path: Path) -> None:
     before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in source.iterdir()}
 
     with AssetIndex(tmp_path / "assets.sqlite") as index:
-        assert index.index(scan_files(source)) == 3
+        assert index.index(scan_files(source), scan_root=source) == 3
         groups = index.duplicate_groups()
 
     assert len(groups) == 1
@@ -96,3 +96,31 @@ def test_cli_does_not_index_database_inside_scan_root(
 
     output = capsys.readouterr().out
     assert "Indexed 1 files." in output
+
+
+def test_repeat_scans_reconcile_deleted_and_moved_paths_by_root(tmp_path: Path) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    deleted = first_root / "deleted.bin"
+    moved_from = first_root / "before.bin"
+    retained = second_root / "retained.bin"
+    deleted.write_bytes(b"delete me")
+    moved_from.write_bytes(b"move me")
+    retained.write_bytes(b"keep me")
+
+    with AssetIndex(tmp_path / "assets.sqlite") as index:
+        index.index(scan_files(first_root), scan_root=first_root)
+        index.index(scan_files(second_root), scan_root=second_root)
+
+        deleted.unlink()
+        moved_to = first_root / "after.bin"
+        moved_from.rename(moved_to)
+        index.index(scan_files(first_root), scan_root=first_root)
+
+        indexed_paths = {
+            Path(path) for (path,) in index.connection.execute("SELECT path FROM files")
+        }
+
+    assert indexed_paths == {moved_to, retained}

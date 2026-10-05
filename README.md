@@ -54,7 +54,12 @@ The first vertical slice scans regular files without following symlinks, streams
 their contents through SHA-256, stores metadata in SQLite, and reports paths that
 have identical content. It never writes to, moves, links, or deletes source files.
 When the SQLite index is inside the scanned directory, the configured database
-and its `-wal` and `-shm` sidecars are excluded automatically.
+and its `-journal`, `-wal`, and `-shm` sidecars are excluded automatically.
+
+Each scan is associated with its resolved root directory. Repeating a scan
+removes database records for paths that were deleted or moved out of that root,
+while records associated with independently scanned roots remain intact. This
+reconciliation updates only SQLite metadata and never removes filesystem content.
 
 ```bash
 asset-vfs /path/to/assets --database /path/to/index.sqlite
