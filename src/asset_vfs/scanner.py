@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,11 +17,12 @@ class ScannedFile:
     modified_ns: int
 
 
-def scan_files(root: Path) -> Iterator[ScannedFile]:
-    """Yield regular files beneath *root* without following symlinks."""
+def scan_files(root: Path, *, exclude: Iterable[Path] = ()) -> Iterator[ScannedFile]:
+    """Yield regular files beneath *root*, omitting explicit paths and symlinks."""
     root = root.expanduser().resolve()
     if not root.is_dir():
         raise NotADirectoryError(root)
+    excluded_paths = {path.expanduser().resolve() for path in exclude}
 
     for directory, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames.sort()
@@ -29,7 +30,7 @@ def scan_files(root: Path) -> Iterator[ScannedFile]:
         base = Path(directory)
         for filename in filenames:
             path = base / filename
-            if path.is_symlink():
+            if path in excluded_paths or path.is_symlink():
                 continue
             try:
                 stat = path.stat()
