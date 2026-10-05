@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from asset_vfs.cli import main
+from asset_vfs.cli import database_files, main
 from asset_vfs.hashing import sha256_file
 from asset_vfs.index import AssetIndex
 from asset_vfs.reporting import format_duplicate_report
@@ -28,6 +28,18 @@ def test_scanner_requires_directory(tmp_path: Path) -> None:
     file.touch()
     with pytest.raises(NotADirectoryError):
         list(scan_files(file))
+
+
+def test_scanner_excludes_database_and_sidecars(tmp_path: Path) -> None:
+    database = tmp_path / "index.sqlite"
+    excluded = database_files(database)
+    (tmp_path / "asset.bin").write_bytes(b"asset")
+    for path in excluded:
+        path.write_bytes(b"database state")
+
+    scanned = list(scan_files(tmp_path, exclude=excluded))
+
+    assert [item.path.name for item in scanned] == ["asset.bin"]
 
 
 def test_sha256_file_streams_known_content(tmp_path: Path) -> None:
@@ -70,3 +82,17 @@ def test_cli_indexes_and_reports(tmp_path: Path, capsys: pytest.CaptureFixture[s
     output = capsys.readouterr().out
     assert "Indexed 2 files." in output
     assert "2 files" in output
+
+
+def test_cli_does_not_index_database_inside_scan_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "asset.bin").write_bytes(b"asset")
+    database = source / "index.sqlite"
+
+    assert main([str(source), "--database", str(database)]) == 0
+
+    output = capsys.readouterr().out
+    assert "Indexed 1 files." in output
