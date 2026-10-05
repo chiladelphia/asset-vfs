@@ -15,6 +15,9 @@ class ScannedFile:
     path: Path
     size: int
     modified_ns: int
+    changed_ns: int
+    device: int
+    inode: int
 
 
 def scan_files(root: Path, *, exclude: Iterable[Path] = ()) -> Iterator[ScannedFile]:
@@ -37,4 +40,11 @@ def scan_files(root: Path, *, exclude: Iterable[Path] = ()) -> Iterator[ScannedF
             except (FileNotFoundError, PermissionError):
                 continue
             if path.is_file():
-                yield ScannedFile(path=path, size=stat.st_size, modified_ns=stat.st_mtime_ns)
+                yield ScannedFile(
+                    path=path,
+                    size=stat.st_size,
+                    modified_ns=stat.st_mtime_ns,
+                    changed_ns=stat.st_ctime_ns,
+                    device=stat.st_dev,
+                    inode=stat.st_ino,
+                )

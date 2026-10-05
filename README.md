@@ -61,6 +61,11 @@ removes database records for paths that were deleted or moved out of that root,
 while records associated with independently scanned roots remain intact. This
 reconciliation updates only SQLite metadata and never removes filesystem content.
 
+An unchanged file reuses its indexed digest without reopening its contents. A
+cache hit requires an exact match on size, nanosecond modification time,
+nanosecond change time, device, and inode. A mismatch in any field streams the
+file through SHA-256 again and refreshes its indexed metadata.
+
 ```bash
 asset-vfs /path/to/assets --database /path/to/index.sqlite
 ```

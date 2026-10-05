@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -124,3 +126,51 @@ def test_repeat_scans_reconcile_deleted_and_moved_paths_by_root(tmp_path: Path) 
         }
 
     assert indexed_paths == {moved_to, retained}
+
+
+def test_repeat_scan_reuses_digest_until_metadata_changes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    asset = source / "asset.bin"
+    asset.write_bytes(b"original")
+
+    with AssetIndex(tmp_path / "assets.sqlite") as index:
+        index.index(scan_files(source), scan_root=source)
+
+        with patch(
+            "asset_vfs.index.sha256_file",
+            side_effect=AssertionError("unchanged file was read"),
+        ):
+            index.index(scan_files(source), scan_root=source)
+
+        asset.write_bytes(b"changed and longer")
+        with patch("asset_vfs.index.sha256_file", wraps=sha256_file) as hasher:
+            index.index(scan_files(source), scan_root=source)
+
+        digest = index.connection.execute(
+            "SELECT sha256 FROM files WHERE path = ?", (str(asset),)
+        ).fetchone()[0]
+
+    hasher.assert_called_once_with(asset)
+    assert digest == hashlib.sha256(b"changed and longer").hexdigest()
+
+
+def test_existing_index_schema_gains_cache_metadata(tmp_path: Path) -> None:
+    database = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE files (
+                   path TEXT PRIMARY KEY,
+                   size INTEGER NOT NULL,
+                   modified_ns INTEGER NOT NULL,
+                   sha256 TEXT NOT NULL
+               )"""
+        )
+
+    with AssetIndex(database) as index:
+        columns = {
+            name
+            for _, name, *_ in index.connection.execute("PRAGMA table_info(files)")
+        }
+
+    assert {"changed_ns", "device", "inode"} <= columns
