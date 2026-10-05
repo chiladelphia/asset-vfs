@@ -1,5 +1,7 @@
 # asset-vfs
 
+[![CI](https://github.com/chiladelphia/asset-vfs/actions/workflows/ci.yml/badge.svg)](https://github.com/chiladelphia/asset-vfs/actions/workflows/ci.yml)
+
 Local macOS asset deduplication and virtual filesystem MVP.
 
 ## Purpose
@@ -37,7 +39,12 @@ Requires Python 3.12+.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+pytest
 ```
+
+GitHub Actions runs the full test suite on Python 3.12 and 3.13 for pull
+requests and pushes to `main`. The workflow has read-only repository
+permissions and uses only temporary test directories for filesystem fixtures.
 
 The repository is intentionally minimal at initialization. Implementation should proceed in small, testable increments, with destructive filesystem behavior disabled by default.
 
